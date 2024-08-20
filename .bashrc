@@ -46,9 +46,6 @@ esac
 
 if [ -n "$force_color_prompt" ]; then
     if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-        # We have color support; assume it's compliant with Ecma-48
-        # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
-        # a case would tend to support setf rather than setaf.)
         color_prompt=yes
     else
         color_prompt=
@@ -75,9 +72,6 @@ esac
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
     alias ls='ls --color=auto'
-    # alias dir='dir --color=auto'
-    # alias vdir='vdir --color=auto'
-
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
@@ -104,6 +98,7 @@ command_status() {
     fi
 }
 
+# Check DNS function
 check_dns() {
     curl -s --max-time 1 https://www.google.com > /dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -113,6 +108,7 @@ check_dns() {
     fi
 }
 
+# Check internet function
 check_internet() {
     timeout 1s ping -c 1 8.8.8.8 > /dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -124,7 +120,7 @@ check_internet() {
 
 # Function to get the current time in seconds
 current_time() {
-    date +"%S"
+    date +"%s"
 }
 
 # Define a unique symbol for root
@@ -132,27 +128,35 @@ root_symbol() {
     echo -n "♔"  # You can choose any symbol like "⚡", "★", etc.
 }
 
+# Initialize global variables to store the last check time and status
+LAST_CHECK_TIME=0
+DNS_STATUS="✘"
+INTERNET_STATUS="✘"
+
 # Use a helper function to set PS1
 update_ps1() {
     local exit_status=$1
+
+    # Get the current time in seconds
+    local now=$(current_time)
+
+    # Perform DNS and internet checks only every 30 seconds
+    if [ $((now - LAST_CHECK_TIME)) -ge 60 ]; then
+        DNS_STATUS=$(check_dns)
+        if [ "$DNS_STATUS" = "✘" ]; then
+            INTERNET_STATUS=$(check_internet)
+        else
+            INTERNET_STATUS="✔"
+        fi
+        LAST_CHECK_TIME=$now
+    fi
 
     # Set random color
     local color_code=$((100 + RANDOM % 101))
     local color_code_str=$(tput setaf $color_code)
 
-    # Check DNS
-    local dns_status=$(check_dns)
-
-    # Check internet only if DNS check fails
-    local internet_status=""
-    if [ "$dns_status" = "✘" ]; then
-        internet_status=$(check_internet)
-    else
-        internet_status="✔"
-    fi
-
     # Build PS1
-    PS1="\[$(tput blink)\]$(random_emoji)\[$(tput sgr0)\]\[${color_code_str}\] $(command_status $exit_status) \$(date +%T) \w (\$(date +'%a %b %g')) 🗄️ $dns_status 🌐 $internet_status \n--> $(root_symbol) \[$(tput sgr0)\] "
+    PS1="\[$(tput blink)\]$(random_emoji)\[$(tput sgr0)\]\[${color_code_str}\] $(command_status $exit_status) \$(date +%T) \w (\$(date +'%a %b %g')) 🗄️ $DNS_STATUS 🌐 $INTERNET_STATUS \n--> $(root_symbol) \[$(tput sgr0)\] "
 }
 
 # PROMPT_COMMAND to capture the exit status and call update_ps1
@@ -165,4 +169,4 @@ alias l='ls -CF'
 
 # Add an "alert" alias for long running commands. Use like so:
 #   sleep 10; alert
-alias alert='notify-send --urgency=low -i "$([ $? = 0
+alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "Command finished"'
